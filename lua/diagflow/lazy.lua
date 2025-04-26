@@ -57,6 +57,26 @@ local function wrap_text(text, max_width)
     return lines
 end
 
+local function is_cursor_line_hidden(config, cursor_line, message_top_line, message_lines, message_max_width, win_width, bufnr)
+    if config.placement == "inline" then
+        return false
+    end
+
+    if cursor_line < message_top_line or message_top_line + #message_lines <= cursor_line then
+        return false
+    end
+
+    local cursor_line_width = strlen(vim.api.nvim_buf_get_lines(bufnr, cursor_line, cursor_line + 1, true)[1])
+    local has_enough_width = true
+    if config.text_align == "left" or config.show_borders then
+        has_enough_width = cursor_line_width + message_max_width < win_width
+    else
+        has_enough_width = cursor_line_width + strlen(message_lines[cursor_line - message_top_line + 1]) < win_width
+    end
+    return not has_enough_width
+end
+
+
 local group = nil
 local ns = nil
 
@@ -187,10 +207,17 @@ function M.init(config)
                 for _, message in ipairs(message_lines) do
                     max_width = math.max(max_width, strlen(message))
                 end
+            elseif config.show_borders then
+                max_width = strlen(message_lines[1])
             end
 
             local is_right = config.text_align == 'right'
             local is_top = config.placement == 'top'
+
+            local message_top_line = win_info.topline + line_offset + config.padding_top
+            if is_cursor_line_hidden(config, line, message_top_line, message_lines, max_width, win_width, bufnr) then
+                line_offset = line_offset + line + 1 - message_top_line
+            end
 
             local lines_added = 0
             for idx, message in ipairs(message_lines) do
